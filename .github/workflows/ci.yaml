@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker Hub 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 이미지 빌드 및 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: lalalalz/givemesalary:${{ github.sha }}
+
+      - name: kubernetes-manifest 레포 체크아웃
+        uses: actions/checkout@v4
+        with:
+          repository: lalalalz/kubernetes-manifest
+          ssh-key: ${{ secrets.MANIFEST_DEPLOY_KEY }}
+          path: kubernetes-manifest
+
+      - name: 이미지 태그 업데이트
+        run: |
+          sed -i "s|image: lalalalz/givemesalary:.*|image: lalalalz/givemesalary:${{ github.sha }}|" \
+            kubernetes-manifest/apps/givemesalary/deployment.yaml
+
+      - name: 변경사항 커밋 및 푸시
+        run: |
+          cd kubernetes-manifest
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add apps/givemesalary/deployment.yaml
+          git commit -m "ci: update givemesalary image to ${{ github.sha }}"
+          git push
